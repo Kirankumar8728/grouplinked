@@ -259,7 +259,90 @@ export async function syncDatabase(): Promise<{
   };
 }
 
-export const syncWithLocalDatabase = syncDatabase;
+export async function purgeAllSeedGroups(): Promise<{ success: boolean; deletedCount: number; message: string }> {
+  let mysqlDeletedCount = 0;
+  const pool = getPool();
+  if (pool) {
+    try {
+      // Precise deletion query targeting ONLY seed group IDs/slugs while explicitly preserving all user-submitted groups
+      const seedSql = `
+        DELETE FROM groups_dir 
+        WHERE (
+             id LIKE 'grp-seed-%' 
+          OR id LIKE 'grp-ig-%' 
+          OR id LIKE 'grp-new-%' 
+          OR id LIKE 'grp-sd-%'
+          OR id IN ('grp-whatsapp-lu5qnpqvc2eahgqumkfqid', 'grp-fb-1067551937700074', 'grp-dc-1188166946950348880', 'grp-rd-curated-sipstea', '1790657405139-11uvv')
+          OR slug IN ('a-to-z-shopping-2', 'sipstea', 'all-india-community-daily-social-hub', '1790657405139-11uvv')
+          OR authorName = 'System Seed'
+        )
+        AND (claimedByUserId IS NULL OR claimedByUserId = '')
+        AND (authorEmail IS NULL OR authorEmail = '');
+      `;
+      const [res]: any = await pool.query(seedSql);
+      mysqlDeletedCount = res?.affectedRows || 0;
+    } catch (err: any) {
+      console.warn('[purgeAllSeedGroups MySQL notice]:', err?.message);
+    }
+  }
+
+  let ramDeletedCount = 0;
+  if (globalForGroups.nexusGroupsDatabase) {
+    const beforeCount = globalForGroups.nexusGroupsDatabase.length;
+    globalForGroups.nexusGroupsDatabase = globalForGroups.nexusGroupsDatabase.filter(g => {
+      if (!g) return false;
+      const id = String(g.id || '').trim().toLowerCase();
+      const slug = String(g.slug || '').trim().toLowerCase();
+      const author = String(g.authorName || '').trim().toLowerCase();
+
+      // Protect real user-submitted groups that have an author email or user ID
+      if (g.authorEmail || g.claimedByUserId || g.ownerId) {
+        return true;
+      }
+
+      // Check for exact seed group matches
+      const isExactSeedId = [
+        'grp-whatsapp-lu5qnpqvc2eahgqumkfqid',
+        'grp-fb-1067551937700074',
+        'grp-dc-1188166946950348880',
+        'grp-rd-curated-sipstea',
+        '1790657405139-11uvv',
+      ].includes(id);
+
+      const isExactSeedSlug = [
+        'a-to-z-shopping-2',
+        'sipstea',
+        'all-india-community-daily-social-hub',
+        '1790657405139-11uvv',
+      ].includes(slug);
+
+      const isSeedPrefix =
+        id.startsWith('grp-seed-') ||
+        id.startsWith('grp-ig-') ||
+        id.startsWith('grp-new-') ||
+        id.startsWith('grp-sd-');
+
+      const isSystemSeedAuthor = author === 'system seed';
+
+      // Purge only if it matches a seed group signature
+      if (isExactSeedId || isExactSeedSlug || isSeedPrefix || isSystemSeedAuthor) {
+        return false;
+      }
+
+      return true;
+    });
+    ramDeletedCount = beforeCount - globalForGroups.nexusGroupsDatabase.length;
+    rebuildGroupsLookupIndex(globalForGroups.nexusGroupsDatabase);
+    saveGroupsToDisk(globalForGroups.nexusGroupsDatabase);
+  }
+
+  const totalPurged = Math.max(mysqlDeletedCount, ramDeletedCount);
+  return {
+    success: true,
+    deletedCount: totalPurged,
+    message: `Purged ${totalPurged} seed groups from storage and database while preserving all user submissions.`
+  };
+}
 
 function syncDatabaseFromSeeds(): void {
   const fromDisk = loadGroupsFromDisk();
@@ -272,7 +355,7 @@ function syncDatabaseFromSeeds(): void {
   rebuildGroupsLookupIndex(globalForGroups.nexusGroupsDatabase);
 }
 
-// Initial boot: load database from disk or fallback to initial seeds if clean empty
+// Initial boot: load existing database from disk
 if (!globalForGroups.nexusGroupsDatabase || globalForGroups.nexusGroupsDatabase.length === 0) {
   syncDatabaseFromSeeds();
 } else {

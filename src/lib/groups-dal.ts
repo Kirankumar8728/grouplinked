@@ -41,8 +41,9 @@ import {
   addCustomTagToGroup as addCustomTagToGroupInStore,
   getGroupsDatabase,
   resetAllGroupMetricsToZero,
+  purgeAllSeedGroups,
 } from './groups-store';
-export { resetAllGroupMetricsToZero, getGroupsDatabase } from './groups-store';
+export { resetAllGroupMetricsToZero, purgeAllSeedGroups, getGroupsDatabase } from './groups-store';
 
 export { mapMysqlRowToGroup as mapRowToGroup, mapMysqlRowToGroup } from './db-mappers';
 
