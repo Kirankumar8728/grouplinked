@@ -3,6 +3,7 @@ import { checkRateLimit } from '@/src/lib/rate-limit';
 import { requireAdmin } from '@/src/lib/admin-auth';
 import { scrapeGroupMetadataDirect, normalizePlatformUrl, isSafePublicUrl } from '@/src/lib/metadata-scraper';
 import { uploadImageToR2, isR2Configured } from '@/src/lib/r2-storage';
+import { validateWhatsAppMetadata } from '@/src/lib/metadata-validator';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -67,6 +68,14 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await scrapeGroupMetadataDirect(url.trim(), detectedPlatform);
+
+    // Explicit WhatsApp validation
+    if (detectedPlatform === 'whatsapp' && result && result.success) {
+      const validation = validateWhatsAppMetadata(result.title, result.imageUrl);
+      if (!validation.isValid) {
+        return NextResponse.json({ success: false, isExpired: true, error: validation.error }, { status: 200, headers: NO_CACHE_HEADERS });
+      }
+    }
 
     // Cache image locally / R2 in background, preserving live direct URL for resilience
     const isAdult = result?.suggestedCategory === 'Adult / 18+' || result?.isNsfw;

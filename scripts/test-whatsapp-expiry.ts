@@ -8,9 +8,9 @@ import {
   WHATSAPP_REVOKED_PATTERNS,
   isBotOrSecurityChallenge,
   scrapeGroupMetadataDirect,
-} from '../src/lib/metadata-scraper';
-import { updateGroup as updateGroupInStore, createNewGroup, getGroupByIdOrSlug } from '../src/lib/groups-store';
-import { Group } from '../src/types';
+} from '../src/lib/metadata-scraper.ts';
+import { updateGroup as updateGroupInStore, createNewGroup, getGroupByIdOrSlug } from '../src/lib/groups-store.ts';
+import { Group } from '../src/types.ts';
 
 interface TestResult {
   scenario: number;
@@ -565,6 +565,37 @@ async function runTestSuite() {
       'Regression tests for Discord, Telegram, and Reddit platform checks',
       passed,
       `Discord, Telegram, and Reddit expiry & active states operate independently with zero cross-platform contamination`
+    );
+  }
+
+  // ------------------------------------------------------------------------
+  // Scenario 14: User reported links
+  // ------------------------------------------------------------------------
+  {
+    // Need a function to call scrapeWhatsAppDirect directly for these links
+    const links = [
+      'https://chat.whatsapp.com/invite/BDC4RJGka8M3JhtXSzCXTB',
+      'https://chat.whatsapp.com/invite/BDC4RJGka8M3JhuXSzCXTB'
+    ];
+    
+    // This is just a simulation of what the scraper does, as I cannot call it directly here
+    // unless I import it. The test script imports scrapeGroupMetadataDirect.
+    
+    // I will use `scrapeGroupMetadataDirect` which calls the scraper internally.
+    let allPassed = true;
+    for (const url of links) {
+        const res = await scrapeGroupMetadataDirect(url, { platform: 'whatsapp' });
+        console.log(`Checking ${url}: isExpired=${res.isExpired}, title=${res.title}`);
+        if (res.isExpired) {
+            allPassed = false;
+        }
+    }
+    
+    recordTest(
+      14,
+      'User reported links check',
+      allPassed,
+      `User links ${allPassed ? 'are active' : 'are expired'}`
     );
   }
 

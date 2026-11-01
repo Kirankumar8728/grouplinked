@@ -768,7 +768,6 @@ async function scrapeWhatsAppDirect(targetUrl: string): Promise<{
   if (
     htmlLower.includes('this invite link was revoked') ||
     htmlLower.includes('link has been revoked') ||
-    htmlLower.includes("couldn't find this group") ||
     htmlLower.includes('this invite link is no longer valid') ||
     htmlLower.includes('this link was reset') ||
     htmlLower.includes('reset invite link')
@@ -804,14 +803,14 @@ async function scrapeWhatsAppDirect(targetUrl: string): Promise<{
   const code = codeMatch ? codeMatch[1] : 'community';
 
   if (!fetchRes.ok || !fetchRes.html) {
-    const fallbackTitle = `WhatsApp Community Group (${code.slice(0, 8)})`;
+    // If the link couldn't be fetched, we treat it as expired.
     return {
-      title: fallbackTitle,
-      description: 'Join this active WhatsApp community group for discussions, updates, and messaging.',
-      imageUrl: getCommunityFallbackAvatar(fallbackTitle, 'whatsapp', code),
-      memberCount: estimateWhatsAppMembers(targetUrl, fallbackTitle),
+      title: 'Expired WhatsApp Group',
+      description: 'This invite link got expired add other active link',
+      imageUrl: '',
+      memberCount: 0,
       isVerified: false,
-      isExpired: false,
+      isExpired: true,
     };
   }
 
@@ -831,6 +830,43 @@ async function scrapeWhatsAppDirect(targetUrl: string): Promise<{
     let description = rawMeta['og:description'] || rawMeta['twitter:description'] || rawMeta['description'] || '';
     let imageUrl = rawMeta['og:image'] || rawMeta['twitter:image'] || '';
 
+    // If still empty after metadata, check document title/headings
+    if (!title) {
+        const docTitle = root.querySelector('title')?.text || '';
+        if (!isGenericGroupTitle(docTitle) && !docTitle.toLowerCase().includes('whatsapp group invite')) {
+             title = decodeHtmlEntitiesAndClean(docTitle.replace(/\s*-\s*WhatsApp$/i, '').trim());
+        }
+    }
+
+    if (!title) {
+        const h3El = root.querySelector('h3') || root.querySelector('h1') || root.querySelector('h2');
+        if (h3El && h3El.text) {
+          const hText = decodeHtmlEntitiesAndClean(h3El.text.trim());
+          if (!isGenericGroupTitle(hText) && !hText.toLowerCase().includes('whatsapp group invite')) {
+            title = hText;
+          }
+        }
+    }
+
+    // Avatar check (pps.whatsapp.net is the hallmark of a valid profile image)
+    const ppsMatch = fetchRes.html.match(/https:\/\/(?:pps|mmg|scontent)\.whatsapp\.net\/[^\s"'>\\]+/i);
+    if (!imageUrl && ppsMatch && ppsMatch[0]) {
+        imageUrl = ppsMatch[0].replace(/&amp;/g, '&');
+    }
+
+    // If no title AND no valid image, flag as expired
+    if (!title || !imageUrl || isGenericGroupImage(imageUrl)) {
+        return {
+            title: 'Expired WhatsApp Group',
+            description: 'This invite link got expired add other active link',
+            imageUrl: '',
+            memberCount: 0,
+            isVerified: false,
+            isExpired: true,
+        };
+    }
+
+    // Continue with existing logic for valid groups...
     if (imageUrl) {
       imageUrl = imageUrl.replace(/&amp;/g, '&').trim();
     }
@@ -839,47 +875,6 @@ async function scrapeWhatsAppDirect(targetUrl: string): Promise<{
     }
     if (description) {
       description = decodeHtmlEntitiesAndClean(description);
-    }
-
-    // Try to get title from document title if og:title is generic or missing
-    if (!title || isGenericGroupTitle(title) || title.toLowerCase().includes('whatsapp group invite')) {
-        const docTitle = root.querySelector('title')?.text || '';
-        const titleMatch = docTitle.match(/^(.*?)\s*(?:\||-)\s*WhatsApp/i);
-        if (titleMatch && titleMatch[1] && !isGenericGroupTitle(titleMatch[1])) {
-            title = decodeHtmlEntitiesAndClean(titleMatch[1].trim());
-        } else if (!isGenericGroupTitle(docTitle) && !docTitle.toLowerCase().includes('whatsapp group invite')) {
-             title = decodeHtmlEntitiesAndClean(docTitle.replace(/\s*-\s*WhatsApp$/i, '').trim());
-        }
-    }
-
-    // Try to get title from heading elements (h3, h1, h2) if still generic
-    const h3El = root.querySelector('h3') || root.querySelector('h1') || root.querySelector('h2') || root.querySelector('h3._9vd5') || root.querySelector('._9vd5');
-    if ((!title || isGenericGroupTitle(title) || title.toLowerCase().includes('whatsapp group invite')) && h3El && h3El.text) {
-      const hText = decodeHtmlEntitiesAndClean(h3El.text.trim());
-      if (!isGenericGroupTitle(hText) && !hText.toLowerCase().includes('whatsapp group invite')) {
-        title = hText;
-      }
-    }
-
-    // WhatsApp avatar filtering
-    if (imageUrl && (imageUrl.includes('whatsapp.com/img/') || imageUrl.includes('favicon') || imageUrl.includes('rsrc.php'))) {
-      imageUrl = '';
-    }
-    if (!imageUrl || isGenericGroupImage(imageUrl)) {
-      const ppsMatch = fetchRes.html.match(/https:\/\/(?:pps|mmg|scontent)\.whatsapp\.net\/[^\s"'>\\]+/i);
-      if (ppsMatch && ppsMatch[0]) {
-        imageUrl = ppsMatch[0].replace(/&amp;/g, '&');
-      }
-    }
-
-    // Ensure non-generic clean title
-    if (!title || isGenericGroupTitle(title) || title.toLowerCase().includes('whatsapp group invite')) {
-      title = `WhatsApp Community Group (${code.slice(0, 8)})`;
-    }
-
-    // Ensure valid non-empty avatar
-    if (!imageUrl || isGenericGroupImage(imageUrl)) {
-      imageUrl = getCommunityFallbackAvatar(title, 'whatsapp', code);
     }
 
     if (isGenericGroupDescription(description)) {
@@ -1623,6 +1618,19 @@ export async function scrapeGroupMetadataDirect(
     try {
       const waData = await scrapeWhatsAppDirect(targetUrl);
       if (waData) {
+        if (waData.isExpired) {
+          return {
+            success: false,
+            url: targetUrl,
+            platform: detectedPlatform,
+            title: 'Expired WhatsApp Group',
+            description: 'This invite link got expired add other active link',
+            imageUrl: '',
+            isExpired: true,
+            expiredReason: 'This invite link got expired add other active link',
+            error: 'This invite link got expired add other active link',
+          };
+        }
         if (waData.title && !isGenericGroupTitle(waData.title)) {
           title = waData.title;
           fallbackMetadata = false;

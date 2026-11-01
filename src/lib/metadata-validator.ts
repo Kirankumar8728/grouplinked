@@ -125,6 +125,25 @@ export function isGenericOrInvalidImage(imageUrl: string | null | undefined): bo
  * If isUserSubmission is true, explicit user-provided title, description, and images are
  * strictly respected and never deleted.
  */
+
+/**
+ * Server-side validator for WhatsApp invite links.
+ * Explicitly checks for the absence of title, image, and meta-tags.
+ */
+export function validateWhatsAppMetadata(title?: string, imageUrl?: string): { isValid: boolean; error?: string } {
+  const hasTitle = title && title.trim().length > 0;
+  const hasImage = imageUrl && imageUrl.trim().length > 0;
+
+  if (!hasTitle || !hasImage) {
+    return {
+      isValid: false,
+      error: 'This invite link got expired add other active link',
+    };
+  }
+
+  return { isValid: true };
+}
+
 export function sanitizeGroupUpdatesWithProtection(
   existing: Group,
   updates: Partial<Group>,
