@@ -152,8 +152,7 @@ export async function POST(req: NextRequest) {
     // Required Debug Log: Before save
     console.log('Fetched metadata', fetchedMetadata);
 
-    // Determine Title: If scraped title exists and is valid, it takes high priority. 
-    // Only use userProvidedTitle if it is clearly not a placeholder/hash.
+    // Determine Title: Prioritize user-provided title when valid; fallback to scraped metadata or clean platform title
     let rawTitle = '';
     const userProvidedTitle = body.title && typeof body.title === 'string' ? body.title.trim() : '';
     const userTitleIsGenericOrHash = !userProvidedTitle || isGenericGroupTitle(userProvidedTitle) || (/^[+]?[a-zA-Z0-9_-]{10,}$/.test(userProvidedTitle) && !userProvidedTitle.includes(' '));
@@ -164,17 +163,17 @@ export async function POST(req: NextRequest) {
       rawTitle = fetchedMetadata.title;
     } else if (userProvidedTitle) {
       rawTitle = userProvidedTitle;
-    } else if (fetchedMetadata?.title) {
+    } else if (fetchedMetadata?.title && !isGenericGroupTitle(fetchedMetadata.title)) {
       rawTitle = fetchedMetadata.title;
     }
 
-    const isInviteCode = !rawTitle || rawTitle.length < 2 || (/^[a-zA-Z0-9_-]{10,}$/.test(rawTitle) && !rawTitle.includes(' '));
+    const isInviteCode = !rawTitle || rawTitle.length < 2 || isGenericGroupTitle(rawTitle);
     let initialTitle = '';
     if (!isInviteCode) {
       initialTitle = rawTitle;
     } else {
       const platCap = detectedPlatform.charAt(0).toUpperCase() + detectedPlatform.slice(1);
-      initialTitle = `${platCap} Community Group (${fetchedMetadata?.suggestedCategory || body.category || 'General'})`;
+      initialTitle = `${platCap} Group (${body.category || fetchedMetadata?.suggestedCategory || 'General'})`;
     }
 
     // Real-Time Health & Expiration Check during submission

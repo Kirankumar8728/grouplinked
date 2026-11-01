@@ -766,12 +766,12 @@ async function scrapeWhatsAppDirect(targetUrl: string): Promise<{
 
   const htmlLower = directHtml.toLowerCase();
   if (
-    htmlLower.includes('invite link is invalid') ||
-    htmlLower.includes('link is invalid') ||
-    htmlLower.includes('no longer available') ||
-    htmlLower.includes('group was reset') ||
-    htmlLower.includes('expired') ||
-    (directHtml.length > 0 && !htmlLower.includes('pps.whatsapp.net') && !htmlLower.includes('h3'))
+    htmlLower.includes('this invite link was revoked') ||
+    htmlLower.includes('link has been revoked') ||
+    htmlLower.includes("couldn't find this group") ||
+    htmlLower.includes('this invite link is no longer valid') ||
+    htmlLower.includes('this link was reset') ||
+    htmlLower.includes('reset invite link')
   ) {
     return {
       title: 'Expired WhatsApp Group',
@@ -794,21 +794,24 @@ async function scrapeWhatsAppDirect(targetUrl: string): Promise<{
           imageUrl: ml.imageUrl || getCategoryTopicImage('Dating & Social'),
           memberCount: estMembers,
           isVerified: false,
+          isExpired: false,
         };
       }
     } catch {}
   }
 
+  const codeMatch = targetUrl.match(/(?:join\/|channel\/|chat\.whatsapp\.com\/)([a-zA-Z0-9_-]+)/i);
+  const code = codeMatch ? codeMatch[1] : 'community';
+
   if (!fetchRes.ok || !fetchRes.html) {
-    const codeMatch = targetUrl.match(/(?:join\/|channel\/|chat\.whatsapp\.com\/)([a-zA-Z0-9_-]+)/i);
-    const code = codeMatch ? codeMatch[1] : 'community';
-    const fallbackTitle = `WhatsApp Community (${code.slice(0, 8)})`;
+    const fallbackTitle = `WhatsApp Community Group (${code.slice(0, 8)})`;
     return {
       title: fallbackTitle,
       description: 'Join this active WhatsApp community group for discussions, updates, and messaging.',
       imageUrl: getCommunityFallbackAvatar(fallbackTitle, 'whatsapp', code),
       memberCount: estimateWhatsAppMembers(targetUrl, fallbackTitle),
       isVerified: false,
+      isExpired: false,
     };
   }
 
@@ -869,52 +872,27 @@ async function scrapeWhatsAppDirect(targetUrl: string): Promise<{
       }
     }
 
-    // Check strictly if the group has both valid image and valid title when scraping
-    const hasValidTitle = Boolean(title && !isGenericGroupTitle(title) && !title.toLowerCase().includes('whatsapp group invite'));
-    const hasValidImage = Boolean(imageUrl && !isGenericGroupImage(imageUrl));
-
-    if (!hasValidTitle || !hasValidImage) {
-      return {
-        title: title || 'Expired WhatsApp Group',
-        description: 'This WhatsApp group invite link has expired or is no longer active (missing active title or group avatar).',
-        imageUrl: '',
-        memberCount: 0,
-        isVerified: false,
-        isExpired: true,
-      };
+    // Ensure non-generic clean title
+    if (!title || isGenericGroupTitle(title) || title.toLowerCase().includes('whatsapp group invite')) {
+      title = `WhatsApp Community Group (${code.slice(0, 8)})`;
     }
 
-    // WhatsApp avatar filtering
-    if (imageUrl && (imageUrl.includes('whatsapp.com/img/') || imageUrl.includes('favicon') || imageUrl.includes('rsrc.php'))) {
-      imageUrl = '';
-    }
+    // Ensure valid non-empty avatar
     if (!imageUrl || isGenericGroupImage(imageUrl)) {
-      const ppsMatch = fetchRes.html.match(/https:\/\/(?:pps|mmg|scontent)\.whatsapp\.net\/[^\s"'>\\]+/i);
-      if (ppsMatch && ppsMatch[0]) {
-        imageUrl = ppsMatch[0].replace(/&amp;/g, '&');
-      }
+      imageUrl = getCommunityFallbackAvatar(title, 'whatsapp', code);
     }
 
-    // Clean description
     if (isGenericGroupDescription(description)) {
-      description = '';
+      description = `Join ${title}, an active WhatsApp group for networking, discussions, and updates.`;
     }
 
     let memberCount: number | undefined;
-    // Check channel subscriber count in text if applicable
     const subMatch = fetchRes.html.match(/([0-9,.]+[KMkm]?)\s+followers/i) || fetchRes.html.match(/([0-9,.]+[KMkm]?)\s+subscribers/i);
     if (subMatch && subMatch[1]) {
       const parsed = parseMemberCount(subMatch[1]);
       if (parsed !== null) {
         memberCount = parsed;
       }
-    }
-
-    if (!title || isGenericGroupTitle(title) || title.toLowerCase().includes('whatsapp group invite')) {
-      const codeMatch = targetUrl.match(/(?:join\/|channel\/|chat\.whatsapp\.com\/)([a-zA-Z0-9_-]+)/i);
-      const code = codeMatch ? codeMatch[1] : 'community';
-      title = `WhatsApp Community Group (${code.slice(0, 8)})`;
-      description = description || 'Join this active WhatsApp community group for discussions, updates, and messaging.';
     }
 
     const estMembers = memberCount || estimateWhatsAppMembers(targetUrl, title);
@@ -925,6 +903,7 @@ async function scrapeWhatsAppDirect(targetUrl: string): Promise<{
       imageUrl,
       memberCount: estMembers,
       isVerified: false,
+      isExpired: false,
     };
   } catch {
     // Fallback on error

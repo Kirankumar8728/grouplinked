@@ -551,31 +551,31 @@ export const SubmitGroupView = () => {
     }
 
     const now = Date.now();
-    if (isSubmitting || (now - lastSubmitTimeRef.current < 2500)) {
+    if (isSubmitting || (now - lastSubmitTimeRef.current < 1000)) {
       setSubmitError('⏳ Submission in progress or sent too rapidly. Please wait a moment.');
       return;
     }
     lastSubmitTimeRef.current = now;
 
-    const cleanDesc = description.trim();
-    const descWordCount = cleanDesc ? cleanDesc.split(/\s+/).filter(Boolean).length : 0;
-    if (!cleanDesc || descWordCount < 1) {
-      setSubmitError('Please fill in a description for your community so prospective members know what it is about (at least 1 word required).');
-      return;
-    }
-
     let finalTitle = title.trim();
-    if (!finalTitle) {
-      const detected = platform !== 'other' ? platform : detectPlatformFromUrl(url);
-      const platLabel = detected !== 'other' ? (detected.charAt(0).toUpperCase() + detected.slice(1)) : 'Community';
+    const detected = platform !== 'other' ? platform : detectPlatformFromUrl(url);
+    const platLabel = detected !== 'other' ? (detected.charAt(0).toUpperCase() + detected.slice(1)) : 'Community';
+
+    if (!finalTitle || isGenericGroupTitle(finalTitle)) {
       finalTitle = `${platLabel} Group (${category})`;
       setTitle(finalTitle);
+    }
+
+    let finalDescription = description.trim();
+    if (!finalDescription) {
+      finalDescription = `Official ${platLabel} community for ${finalTitle}. Connect with active members now.`;
+      setDescription(finalDescription);
     }
 
     // Zero-tolerance restricted keyword check
     const restrictedCheck = checkGroupRestrictedContent({
       title: finalTitle,
-      description,
+      description: finalDescription,
       customTags,
       url,
       rulesSummary
@@ -586,7 +586,13 @@ export const SubmitGroupView = () => {
       return;
     }
 
-    if (duplicateCheckResult?.isDuplicate && duplicateCheckResult.matchedGroup) {
+    // Ensure duplicate match actually applies to the currently entered URL
+    if (
+      duplicateCheckResult?.isDuplicate && 
+      duplicateCheckResult.matchedGroup &&
+      duplicateCheckResult.matchedGroup.url &&
+      url.trim().toLowerCase().includes(duplicateCheckResult.matchedGroup.url.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('?')[0])
+    ) {
       return handleUpdateExistingGroup(duplicateCheckResult.matchedGroup);
     }
 
@@ -611,7 +617,7 @@ export const SubmitGroupView = () => {
     
     const payload = {
       title: finalTitle,
-      description,
+      description: finalDescription,
       url,
       platform,
       category: finalCategory,

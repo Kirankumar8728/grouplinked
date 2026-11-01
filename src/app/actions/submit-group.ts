@@ -157,21 +157,19 @@ export async function submitGroupAction(input: SubmitGroupInput): Promise<Submit
   // Required Debug Log: Before save
   console.log('Fetched metadata', fetchedMetadata);
 
-  // Determine Title: If user provided a real title, use it. But if user title is an unreadable invite hash or generic, prioritize the authentic scraped title!
+  // Determine Title: Prioritize user-provided title when valid; fallback to scraped metadata or clean platform title
   let rawTitle = '';
   const userProvidedTitle = input.title && typeof input.title === 'string' ? input.title.trim() : '';
   const userTitleIsGenericOrHash = !userProvidedTitle || isGenericGroupTitle(userProvidedTitle);
   const isBareHandle = Boolean(norm.platformHandle && userProvidedTitle.toLowerCase() === norm.platformHandle.toLowerCase());
 
-  if (fetchedMetadata && fetchedMetadata.title && !isGenericGroupTitle(fetchedMetadata.title) && (userTitleIsGenericOrHash || isBareHandle)) {
-    rawTitle = fetchedMetadata.title;
-  } else if (userProvidedTitle && !userTitleIsGenericOrHash) {
+  if (userProvidedTitle && !userTitleIsGenericOrHash && !isBareHandle) {
     rawTitle = userProvidedTitle;
   } else if (fetchedMetadata && fetchedMetadata.title && !isGenericGroupTitle(fetchedMetadata.title)) {
     rawTitle = fetchedMetadata.title;
   } else if (userProvidedTitle) {
     rawTitle = userProvidedTitle;
-  } else if (fetchedMetadata?.title) {
+  } else if (fetchedMetadata?.title && !isGenericGroupTitle(fetchedMetadata.title)) {
     rawTitle = fetchedMetadata.title;
   }
 
@@ -181,7 +179,7 @@ export async function submitGroupAction(input: SubmitGroupInput): Promise<Submit
     cleanTitle = sanitizeInput(rawTitle).slice(0, 255);
   } else {
     const platLabel = detectedPlatform.charAt(0).toUpperCase() + detectedPlatform.slice(1);
-    cleanTitle = `${platLabel} Community Group (${fetchedMetadata?.suggestedCategory || input.category || 'General'})`;
+    cleanTitle = `${platLabel} Group (${input.category || fetchedMetadata?.suggestedCategory || 'General'})`;
   }
 
   if (cleanTitle.length < 2) {

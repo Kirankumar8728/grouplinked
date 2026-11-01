@@ -555,6 +555,13 @@ const GENERIC_NORMALIZED_TITLES = new Set([
   'whatsappcommunity',
   'whatsappcommunitygroup',
   'joingroupchatonwhatsapp',
+  'expiredwhatsappgroup',
+  'expiredgroup',
+  'expiredcommunity',
+  'expiredinvitelink',
+  'expiredtelegramgroup',
+  'expireddiscordinvite',
+  'expiredredditcommunity',
   'telegramgroup',
   'telegramchannel',
   'telegramcommunity',
@@ -618,6 +625,11 @@ export function cleanCommunityTitle(title: string, platform?: string): string {
     .replace(/\s*\(Discord(\s+(?:Server|Group))?\)/gi, '')
     .trim();
 
+  // Clean out any "Expired" labels from scraped titles
+  if (/^expired\s+/i.test(clean) || /\s*\(expired\)$/i.test(clean)) {
+    clean = clean.replace(/^expired\s+/i, '').replace(/\s*\(expired\)$/i, '').trim();
+  }
+
   // If title is just an all-lowercase alphanumeric handle, capitalize it cleanly
   if (/^[a-z][a-z0-9_]{2,}$/.test(clean)) {
     clean = clean.charAt(0).toUpperCase() + clean.slice(1);
@@ -630,6 +642,19 @@ export function isGenericGroupTitle(text: string): boolean {
   if (!text) return true;
   const clean = text.trim().toLowerCase();
   
+  // Flag any title containing "expired" as generic so it is never used as the primary title or slug
+  if (
+    clean.includes('expired whatsapp group') ||
+    clean.includes('expired group') ||
+    clean.includes('expired community') ||
+    clean.includes('expired invite') ||
+    clean.startsWith('expired ') ||
+    clean.endsWith(' (expired)') ||
+    clean === 'expired'
+  ) {
+    return true;
+  }
+
   // Only flag as generic invite token if it's explicitly a random invite token starting with '+' or a 24+ char random token
   if (/^[+][a-zA-Z0-9_-]{12,}$/.test(clean) || (/^[a-zA-Z0-9_-]{24,}$/.test(clean) && /[0-9]/.test(clean) && /[a-z]/i.test(clean))) {
     return true;
@@ -749,6 +774,7 @@ export function isGenericGroupDescription(text: string): boolean {
 function isGenericNormalizedTitle(normalized: string): boolean {
   if (!normalized || normalized.length < 4) return true;
   if (GENERIC_NORMALIZED_TITLES.has(normalized)) return true;
+  if (normalized.includes('expired')) return true;
   if (normalized.startsWith('whatsappgroup') || normalized.startsWith('whatsappcommunity')) return true;
   if (normalized.startsWith('telegramgroup') || normalized.startsWith('telegramchannel')) return true;
   if (normalized.startsWith('discordserver') || normalized.startsWith('discordcommunity')) return true;
@@ -779,6 +805,8 @@ export function checkDuplicateCommunity(
   for (const existing of existingGroups) {
     // Skip checking against itself if updating
     if (incoming.id && existing.id === incoming.id) continue;
+    // Skip checking against expired or trashed records
+    if (existing.isExpired || (existing.title && existing.title.toLowerCase().includes('expired')) || (existing.slug && existing.slug.includes('expired'))) continue;
 
     const existingUrl = (existing.url || '').trim();
     const existingCanonical = extractCanonicalGroupIdentifier(existingUrl, existing.platform);
