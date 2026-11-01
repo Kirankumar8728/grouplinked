@@ -273,7 +273,7 @@ export async function purgeAllSeedGroups(): Promise<{ success: boolean; deletedC
           OR id LIKE 'grp-new-%' 
           OR id LIKE 'grp-sd-%'
           OR id IN ('grp-whatsapp-lu5qnpqvc2eahgqumkfqid', 'grp-fb-1067551937700074', 'grp-dc-1188166946950348880', 'grp-rd-curated-sipstea', '1790657405139-11uvv')
-          OR slug IN ('a-to-z-shopping-2', 'sipstea', 'all-india-community-daily-social-hub', '1790657405139-11uvv')
+          OR slug IN ('a-to-z-shopping-2', 'sipstea', 'all-india-community-daily-social-hub', '1790657405139-11uvv', 'middle-east-foodies-restaurants-street-food-club', 'd0b0d0b2d182d0bed187d0b0d182-d0b4d0b0', 'rwhatisthetea-whatisthetea')
           OR authorName = 'System Seed'
         )
         AND (claimedByUserId IS NULL OR claimedByUserId = '')
@@ -314,6 +314,9 @@ export async function purgeAllSeedGroups(): Promise<{ success: boolean; deletedC
         'sipstea',
         'all-india-community-daily-social-hub',
         '1790657405139-11uvv',
+        'middle-east-foodies-restaurants-street-food-club',
+        'd0b0d0b2d182d0bed187d0b0d182-d0b4d0b0',
+        'rwhatisthetea-whatisthetea',
       ].includes(slug);
 
       const isSeedPrefix =
